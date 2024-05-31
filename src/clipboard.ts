@@ -1,10 +1,11 @@
 'use strict';
-import {ExtensionContext, workspace, TextEditor, TextDocument, Range, Position, QuickPickOptions, QuickPickItem, window, commands} from 'vscode';
+import {ExtensionContext, workspace, TextEditor, TextDocument, Range, Position, QuickPickOptions, QuickPickItem, window, commands, env} from 'vscode';
+import { copy } from 'copy-paste';
 
 export function activate(context: ExtensionContext) {
     let config = workspace.getConfiguration('clipboard');
     let clipboardSize = config.get('size', 12);
-    var clipboardArray = [];    
+    var clipboardArray = [];
     var disposableArray = [];
 
     // Save all values that are copied to clipboard in array
@@ -19,18 +20,20 @@ export function activate(context: ExtensionContext) {
                 let lineEnd = new Position(line, doc.lineAt(line).range.end.character)
                 text = doc.getText(new Range(lineStart, lineEnd));
             }
-            
+
             console.log(clipboardArray.length);
             console.log(clipboardSize);
-            
-            if (clipboardArray.indexOf(text) === -1) {
-                clipboardArray.push(text);
-                if (clipboardArray.length > clipboardSize) {
-                    clipboardArray.shift();
-                }
+
+            let index = clipboardArray.indexOf(text);
+            if (index !== -1) {
+                clipboardArray.splice(index, 1);
+            }
+            clipboardArray.push(text);
+            if (clipboardArray.length > clipboardSize) {
+                clipboardArray.shift();
             }
         }
-    }    
+    }
 
     function makeQuickPick(clipboardArray, toBeRemoved?: boolean) {
         // Create quick pick clipboard items
@@ -61,14 +64,22 @@ export function activate(context: ExtensionContext) {
         let activeEditor
         if (activeEditor = window.activeTextEditor) {    // Don't run if no active text editor instance available
             let text = item.description;
-            activeEditor.edit(function (textInserter) {
-                textInserter.delete(activeEditor.selection);    // Delete anything currently selected
-            }).then(function () {
+
+            let index = clipboardArray.indexOf(text);
+            if (index !== -1) {
+                clipboardArray.splice(index, 1);
+            }
+            clipboardArray.push(text);
+            copy(text, function() {
                 activeEditor.edit(function (textInserter) {
-                    textInserter.insert(activeEditor.selection.start, text)     // Insert text from list
+                    textInserter.delete(activeEditor.selection);    // Delete anything currently selected
+                }).then(function () {
+                    activeEditor.edit(function (textInserter) {
+                        textInserter.insert(activeEditor.selection.start, text)     // Insert text from list
+                    })
                 })
-            })  
-        }         
+            })
+        }
     }
 
     disposableArray.push(commands.registerCommand('clipboard.copy', () => {
@@ -86,10 +97,10 @@ export function activate(context: ExtensionContext) {
     }));
 
     disposableArray.push(commands.registerCommand('clipboard.pasteFromClipboard', () => {
-        if (clipboardArray.length == 0) { 
+        if (clipboardArray.length == 0) {
             window.setStatusBarMessage("No items in clipboard");
             window.showQuickPick(makeQuickPick(clipboardArray));
-            return; 
+            return;
         } else {
             window.showQuickPick(makeQuickPick(clipboardArray)).then((item) => { pasteSelected(item); });
         }
@@ -114,7 +125,7 @@ export function activate(context: ExtensionContext) {
             });
         }
     }));
-    
+
     disposableArray.push(commands.registerCommand('clipboard.editClipboard', () => {
         if (clipboardArray.length == 0) {
             window.setStatusBarMessage("No items in clipboard");
